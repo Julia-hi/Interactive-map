@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Canser rates map</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <!-- <link href="/dist/output.css" rel="stylesheet"> -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://unpkg.com/tailwindcss@^2/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css"
+        integrity="sha256-kLaT2GOSpHechhsozzB+flnD+zUyjE2LlfWPgU04xyI=" crossorigin="anonymous"
+        referrerpolicy="no-referrer" />
+
+    <!-- Make sure you put this AFTER Leaflet's CSS -->
+    <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"
+        integrity="sha256-WBkoXOwTeyKclOHuWtc+i2uENFpDZ9YPdf5Hf+D7ewM=" crossorigin="anonymous"
+        referrerpolicy="no-referrer"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        clifford: '#da373d',
+                        transparent: 'transparent',
+                        current: 'currentColor',
+                        'white': '#ffffff',
+                        'purple': '#3f3cbb',
+                        'midnight': '#121063',
+                        'metal': '#565584',
+                        'tahiti': '#3ab7bf',
+                        'silver': '#ecebff',
+                        'bubble-gum': '#ff77e9',
+                        'bermuda': '#78dcca'
+                    },
+                    screens: {
+                        'mini': '390px',
+                        // => @media (min-width: 640px) { ... }
+
+                        'laptop': '1024px',
+                        // => @media (min-width: 1024px) { ... }
+
+                        'desktop': '1280px',
+                        // => @media (min-width: 1280px) { ... }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+
+<body>
+    <div class="container mx-auto py-5 h-screen">
+        <div class="divide-y divide-gray-300/50">
+            <h1 class="text-3xl font-bold underline text-center" id="title_"></h1>
+        </div>
+        <div class="grid md:grid-cols-4 mini:grid-cols-1 grid-rows-2 m-4 h-5/6 ">
+            <div id="map" class="md:col-span-3 md:row-span-2"></div>
+            <div class="mini:order-first px-5 md:row-span-2">
+                <select id="featureSelect"
+                    class="my-2 block w-full px-4 py-2 pr-8 leading-tight bg-white border border-gray-400 rounded  focus:outline-none focus:bg-white focus:border-gray-500">
+                    <option value="">Select feature...</option>
+                </select>
+                <select id="typeSelect"
+                    class="max-h-1-12 my-2 block w-full px-4 py-2 pr-8 leading-tight bg-white border border-gray-400 rounded  focus:outline-none focus:bg-white focus:border-gray-500">
+                    <option value="">Select type of cancer...</option>
+                </select>
+            </div>
+        </div>
+    </div>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.3/jquery.min.js"></script>
+
+    <script>
+        let jsonUrl = 'https://s3.us-west-2.amazonaws.com/secure.notion-static.com/58792f1d-030a-47d7-953f-92bd16e1dd06/Cancer_Rates.geojson?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=AKIAT73L2G45EIPT3X45%2F20230227%2Fus-west-2%2Fs3%2Faws4_request&X-Amz-Date=20230227T084855Z&X-Amz-Expires=86400&X-Amz-Signature=6cfd2ae2c768b6d2b37118fce8b8065ca9093aecb65bd5c856f4115c31956c2c&X-Amz-SignedHeaders=host&response-content-disposition=filename%3D%22Cancer_Rates.geojson%22&x-id=GetObject';
+        //get data from remote geojson when window is loaded
+        window.onload = async () => {
+            await getData();
+        };
+
+        function showMap(data) {
+
+            var map = L.map('map').setView([42.323542923000052, -87.971963931999937], 10.5);
+
+            var myMap = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            }).addTo(map);
+            console.log(map.getBounds());
+            var initialBounds = map.getBounds();
+
+
+            let selectedFeature;
+
+            var myStyle = {
+                "color": "#ff7800",
+                "weight": 2,
+                "opacity": 0.65
+            };
+            //event for feature selection
+            $('#featureSelect').on('change', function () {
+                selectedFeature = $('#featureSelect').val();
+                // Remove any previously selected layers
+                let layer = data.features;
+
+                map.eachLayer(function (layer) {
+                    if (layer.hasOwnProperty("_selected")) {
+                        map.removeLayer(layer);
+                    }
+                });
+                //selected Feature
+                var selectedLayer = L.geoJSON(data.features[selectedFeature], {
+                    style: myStyle
+                }).addTo(map);
+                if (selectedFeature == "") {
+                    //   map.fitBounds(42.323542923000052, -87.971963931999937);
+                    map.fitBounds(initialBounds);
+                } else {
+                    var coordinates = data.features[selectedFeature].geometry.coordinates;
+                    let polygon = L.polygon(coordinates);
+                    let bounds = polygon.getBounds();
+                    let southWest = bounds.getSouthWest();
+                    let northEast = bounds.getNorthEast();
+                    let cSouthWest = L.latLng(southWest.lng, southWest.lat);
+                    let cNortEast = L.latLng(northEast.lng, northEast.lat);
+                    let newBounds = L.latLngBounds(cSouthWest, cNortEast);
+                    console.log(newBounds);
+                    map.fitBounds(newBounds);
+                }
+                // Mark layer as selected
+                selectedLayer._selected = true;
+            });
+
+
+            //event for type selection
+            $('#typeSelect').on('change', function () {
+                var selectedType = $('#typeSelect').val();
+                var newStyle;
+                // Remove any previously selected type
+                map.eachLayer(function (layer) {
+                    if (layer instanceof L.GeoJSON)
+                        map.removeLayer(layer);
+                });
+                if (selectedType != '') {
+                    L.geoJSON(data, {
+                        onEachFeature: function (feature, layer) {
+                            var selectedTypeValue = getTypeValue(feature, selectedType);
+                            // Add a popup to the layer
+                            layer.bindPopup("zip-code: " + feature.properties.ZIP + "<br> " + selectedType + ": " + selectedTypeValue);
+                            //   get color for selected type
+                            var color = getColor(selectedType);
+                            //get max value of all features of given type
+                            var maxValue = getMaxTypeValue(data, selectedType);
+                            //calculate opacity for each layer
+                            var opacity = calcOpacity(selectedTypeValue, maxValue);
+                            //set style for layer
+                            newStyle = setMyStyle(color, opacity);
+                            layer.setStyle(newStyle);
+                        }
+                    }).addTo(map);
+                }
+            })
+        }
+
+        function getColor(type) {
+            return type == 'Colorectal' ? '#800026' :
+                type == 'Lung_Bronc' ? '#2ca25f' :
+                    type == 'Breast_Can' ? '#E31A1C' :
+                        type == 'Prostate_C' ? '#FC4E2A' :
+                            type == 'Urinary_Sy' ? '#FD8D3C' :
+                                type == 'All_Cancer' ? '#2b8cbe' :
+                                    '#FFEDA0';
+        }
+
+        function setMyStyle(color, opacity) {
+            var myStyle = {
+                "color": color,
+                "weight": 2,
+                "opacity": 0.8,
+                "fillColor": color,
+                "fillOpacity": opacity
+            };
+            return myStyle;
+        }
+
+        function getData() {
+            fetch(jsonUrl)
+                .then(response => {
+                    return response.json();
+                })
+                .then(data => {
+                    document.getElementById('title_').innerText = data.name;
+                    showOptionsFeatures(data); // add options to select of feature
+                    showOptionsType(data); // add options to delect of type
+                    showMap(data);
+                });
+        }
+
+        function showOptionsFeatures(data) {
+            $(data.features).each((ind, ele) => {
+                $("#featureSelect").append("<option value='" + ind + "' > " + ele.properties.ZIP + " </option>");
+            })
+        }
+
+        function showOptionsType(data) {
+            $(data.features[0]).each((ind, ele) => {
+                $(ele.properties).each((ind1, properties) => {
+                    var keys = Object.keys(properties);
+                    for (let i = 0; i < keys.length; i++) {
+                        if (keys[i] != 'ZIP' && keys[i] != 'FID' && keys[i] != 'SHAPE_Length' && keys[i] != 'SHAPE_Area') {
+                            $("#typeSelect").append("<option value='" + keys[i] + "' > " + keys[i] + " </option>");
+                        }
+                    }
+                })
+            })
+        }
+
+        //get value of type for selected feature
+        function getTypeValue(selectedFeature, type) {
+            var typeValue;
+            var layerProperties = selectedFeature.properties;
+            if (layerProperties.hasOwnProperty(type)) {
+                typeValue = layerProperties[type]; //get value of given type
+            }
+            return typeValue;
+        }
+
+        //Get max value of selected type from all features
+        function getMaxTypeValue(data, selectedType) {
+            var typeValues = [];
+            $(data.features).each((ind, feature) => {
+                $(feature.properties).each((ind, property) => {
+                    typeValues.push(property[selectedType]);
+                })
+            })
+            let maxValue = Math.max(...typeValues);
+            return maxValue;
+        }
+
+        //calculate opacity for selected type of concrete feature
+        function calcOpacity(typeValue, maxValue) {
+            var opacity = ((typeValue * 100) / maxValue) / 100;
+
+            return opacity;
+        }
+
+        //calculate opacity for selected type of concrete feature
+        function calcDencity(typeValue, maxValue) {
+            var opacity = ((typeValue * 100) / maxValue);
+            return opacity;
+        }
+    </script>
+</body>
+
+</html>
